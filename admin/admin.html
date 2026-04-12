@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MumiNita - Panel Administrativo</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="admin-styles.css">
+</head>
+
+<body>
+    <!-- Login Modal -->
+    <div id="loginModal" class="modal-overlay active">
+        <div class="login-container">
+            <div class="login-card">
+                <h2><i class="fas fa-lock"></i> Panel Administrativo</h2>
+                <form id="loginForm">
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" id="loginEmail" placeholder="tu@email.com" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Contraseña</label>
+                        <input type="password" id="loginPassword" placeholder="Tu contraseña" required>
+                    </div>
+                    <button type="submit" class="btn-primary">Ingresar</button>
+                    <p id="loginError" class="error-message hidden"></p>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Dashboard -->
+    <div id="adminPanel" class="admin-panel hidden">
+        <!-- Header -->
+        <header class="admin-header">
+            <div class="header-content">
+                <h1><i class="fas fa-box"></i> Inventario MumiNita</h1>
+                <div class="header-actions">
+                    <span id="userInfo" class="user-info"></span>
+                    <button id="logoutBtn" class="btn-danger" title="Cerrar sesión">
+                        <i class="fas fa-sign-out-alt"></i> Salir
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Dashboard Stats -->
+        <section class="dashboard-stats">
+            <div class="stat-card">
+                <i class="fas fa-box"></i>
+                <div>
+                    <h3 id="totalProducts">0</h3>
+                    <p>Total Productos</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <i class="fas fa-exclamation-triangle"></i>
+                <div>
+                    <h3 id="lowStockCount">0</h3>
+                    <p>Bajo Stock</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <i class="fas fa-dollar-sign"></i>
+                <div>
+                    <h3 id="totalValue">$0</h3>
+                    <p>Valor Total</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <i class="fas fa-cube"></i>
+                <div>
+                    <h3 id="totalUnits">0</h3>
+                    <p>Total Unidades</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Controls -->
+        <section class="controls">
+            <div class="controls-left">
+                <button id="billingBtn" class="btn-primary" style="background: #28a745;">
+                    <i class="fas fa-file-invoice"></i> Facturación
+                </button>
+                <button id="clientesBtn" class="btn-primary" style="background: #007bff;">
+                    <i class="fas fa-users"></i> Clientes
+                </button>
+                <button id="ley1581Btn" class="btn-primary" style="background: #6f42c1;">
+                    <i class="fas fa-gavel"></i> Ley 1581
+                </button>
+                <button id="addProductBtn" class="btn-primary">
+                    <i class="fas fa-plus"></i> Nuevo Producto
+                </button>
+                <input type="text" id="searchInput" class="search-input" placeholder="Buscar producto...">
+                <select id="categoryFilter" class="filter-select">
+                    <option value="">Todas las categorías</option>
+                    <option value="Bebes">Bebés</option>
+                    <option value="Niños">Niños</option>
+                    <option value="Niñas">Niñas</option>
+                    <option value="Accesorios">Accesorios</option>
+                    <option value="Destacados">Destacados</option>
+                    <option value="Calzado">Calzado</option>
+                    <option value="Bautizo">Bautizo</option>
+                    <option value="Primera Comunión">Primera Comunión</option>
+                </select>
+            </div>
+            <div class="controls-right">
+                <div class="view-toggle">
+                    <button type="button" class="btn-view active" id="tableViewBtn" title="Vista tabla">
+                        <i class="fas fa-list"></i>
+                    </button>
+                    <button type="button" class="btn-view" id="gridViewBtn" title="Vista galería">
+                        <i class="fas fa-th-large"></i>
+                    </button>
+                </div>
+                <button id="exportBtn" class="btn-secondary">
+                    <i class="fas fa-download"></i> Descargar CSV
+                </button>
+                <button id="importBtn" class="btn-secondary">
+                    <i class="fas fa-upload"></i> Importar CSV
+                </button>
+                <input type="file" id="importFile" accept=".csv" style="display: none;">
+            </div>
+        </section>
+
+        <!-- Products Table -->
+        <section class="table-container" id="tableView">
+            <table class="products-table">
+                <thead>
+                    <tr>
+                        <th>Ref</th>
+                        <th>Nombre</th>
+                        <th>Categoría</th>
+                        <th>Precio</th>
+                        <th>Stock</th>
+                        <th>Imagen</th>
+                        <th>Descripción</th>
+                        <th>Etiqueta</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody id="productsTableBody">
+                    <tr class="loading-row">
+                        <td colspan="9" class="text-center">
+                            <i class="fas fa-spinner fa-spin"></i> Cargando productos...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <!-- Products Grid View -->
+        <section class="grid-container hidden" id="gridView">
+            <div class="products-grid" id="productsGrid">
+                <!-- Products will be rendered here -->
+            </div>
+        </section>
+
+        <!-- Billing Section -->
+        <section class="billing-section hidden" id="billingSection">
+            <div class="billing-header">
+                <h2><i class="fas fa-file-invoice"></i> Módulo de Facturación</h2>
+                <button id="newInvoiceBtn" class="btn-primary">
+                    <i class="fas fa-plus"></i> Nueva Factura
+                </button>
+            </div>
+
+            <!-- Invoice Form -->
+            <div class="invoice-form-container" id="invoiceFormContainer">
+                <form id="invoiceForm">
+                    <div class="form-section">
+                        <h3>Datos del Cliente</h3>
+                        <!-- Buscador de clientes -->
+                        <div class="client-search-section" style="margin-bottom: 1.5rem;">
+                            <label style="font-weight: 600; display: block; margin-bottom: 0.5rem;">
+                                <i class="fas fa-search"></i> Buscar Cliente
+                            </label>
+                            <div class="search-box-container" style="display: flex; gap: 10px;">
+                                <input type="text" id="clientSearchInput"
+                                    placeholder="Digite identificación, nombre o teléfono..."
+                                    style="flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+                                <button type="button" id="searchClientBtn" class="btn-primary"
+                                    style="padding: 10px 20px;">
+                                    <i class="fas fa-search"></i>
+                                </button>
+                            </div>
+                            <!-- Resultados de búsqueda -->
+                            <div id="clientSearchResults" class="search-results-dropdown" style="display: none;"></div>
+                        </div>
+
+                        <div class="form-row" style="align-items: flex-end; margin-bottom: 1rem;">
+                            <button type="button" id="newClientBtn" class="btn-secondary" style="margin-bottom: 8px;">
+                                <i class="fas fa-user-plus"></i> Nuevo Cliente
+                            </button>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Nombre Cliente *</label>
+                                <input type="text" id="invoiceClientName" required placeholder="Nombre completo">
+                            </div>
+                            <div class="form-group">
+                                <label>Tipo ID *</label>
+                                <select id="invoiceIdType" required>
+                                    <option value="">Seleccionar</option>
+                                    <option value="CC">Cédula Ciudadanía</option>
+                                    <option value="CE">Cédula Extranjería</option>
+                                    <option value="TI">Tarjeta Identidad</option>
+                                    <option value="RC">Registro Civil</option>
+                                    <option value="NIT">NIT</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Número ID *</label>
+                                <input type="text" id="invoiceIdNumber" required placeholder="Número de identificación">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Email</label>
+                                <input type="email" id="invoiceEmail" placeholder="correo@email.com">
+                            </div>
+                            <div class="form-group">
+                                <label>Teléfono</label>
+                                <input type="text" id="invoicePhone" placeholder="3001234567">
+                            </div>
+
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3>Productos</h3>
+                        <!-- Sistema híbrido: Referencia + Categoría + Selector -->
+                        <div class="product-selector-hybrid">
+                            <!-- Búsqueda por referencia -->
+                            <div class="reference-search">
+                                <label for="invoiceProductReference">Referencia:</label>
+                                <input type="text" id="invoiceProductReference" placeholder="Digite la referencia..."
+                                    autocomplete="off">
+                                <div id="referenceResult" class="reference-result"></div>
+                            </div>
+                            <div class="or-divider">O</div>
+                            <!-- Selector por categoría -->
+                            <div class="category-filter">
+                                <label for="categorySelector">Categoría:</label>
+                                <select id="categorySelector">
+                                    <option value="">Todas las categorías</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="product-selector">
+                            <select id="productSelector">
+                                <option value="">Seleccionar producto...</option>
+                            </select>
+                            <select id="productSize">
+                                <option value="">Seleccionar talla...</option>
+                            </select>
+                            <input type="number" id="productQuantity" min="1" value="1" style="width: 80px;">
+                            <button type="button" id="addProductToInvoiceBtn" class="btn-secondary">
+                                <i class="fas fa-plus"></i> Agregar
+                            </button>
+                        </div>
+                        <table class="invoice-items-table" id="invoiceItemsTable">
+                            <thead>
+                                <tr>
+                                    <th>Referencia</th>
+                                    <th>Nombre del producto</th>
+                                    <th>Talla</th>
+                                    <th>Cantidad</th>
+                                    <th>Precio Unitario</th>
+                                    <th>Subtotal</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="invoiceItemsBody">
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="invoice-totals">
+                        <div class="total-row">
+                            <span>Subtotal:</span>
+                            <span id="invoiceSubtotal">$0</span>
+                        </div>
+                        <div class="total-row total-final">
+                            <span>TOTAL:</span>
+                            <span id="invoiceTotal">$0</span>
+                        </div>
+                    </div>
+
+                    <div class="invoice-actions">
+                        <button type="submit" class="btn-primary">
+                            <i class="fas fa-save"></i> Generar Factura
+                        </button>
+                        <button type="button" id="cancelInvoiceBtn" class="btn-secondary">
+                            Cancelar
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Invoice History -->
+            <div class="invoice-history">
+                <h3>Historial de Facturas</h3>
+
+                <!-- FILTROS DE FACTURAS -->
+                <div class="invoice-filters"
+                    style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+
+                    <div>
+                        <label for="filterFechaDesde"
+                            style="display: block; font-weight: bold; margin-bottom: 5px;">Fecha desde:</label>
+                        <input type="date" id="filterFechaDesde"
+                            style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                    </div>
+
+                    <div>
+                        <label for="filterFechaHasta"
+                            style="display: block; font-weight: bold; margin-bottom: 5px;">Fecha hasta:</label>
+                        <input type="date" id="filterFechaHasta"
+                            style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                    </div>
+
+                    <div>
+                        <label for="filterCliente"
+                            style="display: block; font-weight: bold; margin-bottom: 5px;">Cliente:</label>
+                        <input type="text" id="filterCliente" placeholder="Buscar cliente..."
+                            style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                    </div>
+
+                    <div>
+                        <label for="filterEstado"
+                            style="display: block; font-weight: bold; margin-bottom: 5px;">Estado:</label>
+                        <select id="filterEstado"
+                            style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                            <option value="">Todos</option>
+                            <option value="activa">Activa</option>
+                            <option value="anulada">Anulada</option>
+                        </select>
+                    </div>
+
+                </div>
+
+                <table class="invoices-table" id="invoicesTable">
+                    <thead>
+                        <tr>
+                            <th>Número</th>
+                            <th>Fecha</th>
+                            <th>Cliente</th>
+                            <th>Total</th>
+                            <th>Estado</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="invoicesTableBody">
+                        <tr>
+                            <td colspan="6" class="text-center">
+                                <i class="fas fa-spinner fa-spin"></i> Cargando facturas...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <!-- PAGINACIÓN -->
+                <div id="invoicePagination"></div>
+            </div>
+        </section>
+
+        <!-- Clients Section -->
+        <section class="clients-section hidden" id="clientesSeccion">
+            <div class="clients-header">
+                <h2><i class="fas fa-users"></i> Gestión de Clientes</h2>
+                <button id="nuevoClienteBtn" class="btn-primary">
+                    <i class="fas fa-user-plus"></i> Nuevo Cliente
+                </button>
+            </div>
+
+            <!-- Search Bar -->
+            <div class="clients-search" style="margin-bottom: 20px;">
+                <input type="text" id="buscarClienteInput"
+                    placeholder="Buscar por identificación, nombre, email o teléfono..." class="search-input"
+                    style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+            </div>
+
+            <!-- Clients Table -->
+            <div class="table-container" id="clientesTableContainer">
+                <table class="clients-table">
+                    <thead>
+                        <tr>
+                            <th>Identificación</th>
+                            <th>Nombre</th>
+                            <th>Email</th>
+                            <th>Teléfono</th>
+                            <th>Dirección</th>
+                            <th>Fecha Registro</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="clientesTableBody">
+                        <tr class="loading-row">
+                            <td colspan="7" class="text-center">
+                                <i class="fas fa-spinner fa-spin"></i> Cargando clientes...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="clientesPaginacion" style="margin-top: 20px;"></div>
+        </section>
+
+        <!-- Legal Consent Section (Ley 1581) -->
+        <div id="secLegalWrapper" class="hidden" style="padding: 2rem; max-width: 1400px; margin: 0 auto; width: 100%;">
+            <div class="section-header"
+                style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; gap:20px;">
+                <h2 style="font-size:1.5rem; white-space:nowrap;"><i class="fas fa-gavel"></i> Gestión de Autorizaciones
+                    (Ley 1581)</h2>
+                <div style="display: flex; gap: 10px; flex: 1; max-width: 500px;">
+                    <input type="text" id="legalSearchInput" placeholder="Buscar por nombre o identificación..."
+                        style="flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size:14px;">
+                    <button type="button" class="btn-primary" style="padding: 10px 20px;">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+            </div>
+            <div
+                style="background: white; border-radius: 12px; overflow-x: auto; box-shadow: 0 2px 8px rgba(0,0,0,0.07);">
+                <table id="legalTable" class="products-table" style="width:100%; border-collapse:collapse;">
+                    <thead>
+                        <tr>
+                            <th>Fecha/Hora</th>
+                            <th>Nombre</th>
+                            <th>Identificación</th>
+                            <th>Email</th>
+                            <th>Versión</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="legalTableBody">
+                        <tr class="loading-row">
+                            <td colspan="6" class="text-center" style="padding: 2rem;">
+                                <i class="fas fa-spinner fa-spin"></i> Cargando autorizaciones...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div><!-- /adminPanel -->
+
+    <!-- Client Modal (Add/Edit) -->
+    <div id="clienteModal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTituloCliente">Nuevo Cliente</h2>
+                <button type="button" id="cerrarModalClienteBtn" class="btn-close">×</button>
+            </div>
+            <form id="formCliente">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Tipo ID *</label>
+                        <select id="clienteTipoId" required>
+                            <option value="">Seleccionar</option>
+                            <option value="CC">Cédula Ciudadanía</option>
+                            <option value="CE">Cédula Extranjería</option>
+                            <option value="TI">Tarjeta Identidad</option>
+                            <option value="RC">Registro Civil</option>
+                            <option value="NIT">NIT</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Identificación *</label>
+                        <input type="text" id="clienteIdentificacion" required placeholder="Número de identificación">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Nombre Completo *</label>
+                    <input type="text" id="clienteNombre" required placeholder="Nombre del cliente">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" id="clienteEmail" placeholder="correo@ejemplo.com">
+                    </div>
+                    <div class="form-group">
+                        <label>Teléfono</label>
+                        <input type="tel" id="clienteTelefono" placeholder="3161234567">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Dirección</label>
+                    <textarea id="clienteDireccion" placeholder="Dirección del cliente" rows="2"></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" id="cancelarClienteBtn" class="btn-secondary">Cancelar</button>
+                    <button type="submit" class="btn-primary">Guardar Cliente</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Product Modal (Add/Edit) -->
+    <div id="productModal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTitle">Nuevo Producto</h2>
+                <button class="close-btn" id="closeModal">&times;</button>
+            </div>
+            <form id="productForm">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Referencia *</label>
+                        <input type="text" id="productReference" placeholder="Código (ej: 1, 2, R1)" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Nombre *</label>
+                        <input type="text" id="productName" placeholder="Nombre del producto" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Categoría *</label>
+                        <select id="productCategory" required>
+                            <option value="">Selecciona categoría</option>
+                            <option value="Bebes">Bebés</option>
+                            <option value="Niños">Niños</option>
+                            <option value="Niñas">Niñas</option>
+                            <option value="Accesorios">Accesorios</option>
+                            <option value="Destacados">Destacados</option>
+                            <option value="Calzado">Calzado</option>
+                            <option value="Bautizo">Bautizo</option>
+                            <option value="Primera Comunión">Primera Comunión</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Tallas (separadas por coma)</label>
+                        <input type="text" id="productTallas" placeholder="Ej: 2,4,6,8,10,12">
+                    </div>
+                    <div class="form-group">
+                        <label>Colores (separados por coma)</label>
+                        <input type="text" id="productColores" placeholder="Ej: azul, rosa, lila">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Descripción</label>
+                    <textarea id="productDescription" placeholder="Descripción del producto" rows="2"></textarea>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Precio Base *</label>
+                        <input type="number" id="productPrice" placeholder="Precio" min="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Stock Total *</label>
+                        <input type="number" id="productStock" placeholder="Cantidad total" min="0" required>
+                    </div>
+                </div>
+
+                <!-- Stock por Talla -->
+                <div class="form-section-title">
+                    <i class="fas fa-boxes"></i> Stock por Talla
+                </div>
+                <div class="form-row stock-talla-row">
+                    <div class="form-group small"><label>Stock 00</label><input type="number" id="stock_00" min="0"
+                            value="0"></div>
+                    <div class="form-group small"><label>Stock 0</label><input type="number" id="stock_0" min="0"
+                            value="0"></div>
+                    <div class="form-group small"><label>Stock 1</label><input type="number" id="stock_1" min="0"
+                            value="0"></div>
+                    <div class="form-group small"><label>Stock 2</label><input type="number" id="stock_2" min="0"
+                            value="0"></div>
+                    <div class="form-group small"><label>Stock 4</label><input type="number" id="stock_4" min="0"
+                            value="0"></div>
+                    <div class="form-group small"><label>Stock 6</label><input type="number" id="stock_6" min="0"
+                            value="0"></div>
+                    <div class="form-group small"><label>Stock 8</label><input type="number" id="stock_8" min="0"
+                            value="0"></div>
+                    <div class="form-group small"><label>Stock 10</label><input type="number" id="stock_10" min="0"
+                            value="0"></div>
+                    <div class="form-group small"><label>Stock 12</label><input type="number" id="stock_12" min="0"
+                            value="0"></div>
+                </div>
+
+                <!-- Precio por Talla -->
+                <div class="form-section-title">
+                    <i class="fas fa-dollar-sign"></i> Precio por Talla
+                </div>
+                <div class="form-row stock-talla-row">
+                    <div class="form-group small"><label>Precio 00</label><input type="number" id="precio_00" min="0">
+                    </div>
+                    <div class="form-group small"><label>Precio 0</label><input type="number" id="precio_0" min="0">
+                    </div>
+                    <div class="form-group small"><label>Precio 1</label><input type="number" id="precio_1" min="0">
+                    </div>
+                    <div class="form-group small"><label>Precio 2</label><input type="number" id="precio_2" min="0">
+                    </div>
+                    <div class="form-group small"><label>Precio 4</label><input type="number" id="precio_4" min="0">
+                    </div>
+                    <div class="form-group small"><label>Precio 6</label><input type="number" id="precio_6" min="0">
+                    </div>
+                    <div class="form-group small"><label>Precio 8</label><input type="number" id="precio_8" min="0">
+                    </div>
+                    <div class="form-group small"><label>Precio 10</label><input type="number" id="precio_10" min="0">
+                    </div>
+                    <div class="form-group small"><label>Precio 12</label><input type="number" id="precio_12" min="0">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Imagen</label>
+                        <input type="file" id="productImageFile" accept="image/*" style="margin-bottom: 5px;">
+                        <input type="text" id="productImage" placeholder="O ingresa una URL directo">
+                    </div>
+                    <div class="form-group">
+                        <label>Etiqueta</label>
+                        <select id="productEtiqueta">
+                            <option value="">Sin etiqueta</option>
+                            <option value="Nuevo">Nuevo</option>
+                            <option value="destacados">Destacados</option>
+                            <option value="-5%">-5%</option>
+                            <option value="-25%">-25%</option>
+                            <option value="-50%">-50%</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" id="cancelBtn" class="btn-secondary">Cancelar</button>
+                    <button type="submit" class="btn-primary">Guardar Producto</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast"></div>
+
+    <script src="config.js"></script>
+    <script src="supabase-config.js"></script>
+    <script src="factura-impresion.js"></script>
+    <script src="clientes.js"></script>
+    <script src="admin.js"></script>
+
+    <!-- Inicializar inventario al cargar la página -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            loadFromLocalStorage();
+            updateDashboard();
+            renderTable();
+        });
+    </script>
+</body>
+
+</html>
