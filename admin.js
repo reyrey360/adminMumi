@@ -1872,8 +1872,10 @@ document.getElementById('invoiceForm')?.addEventListener('submit', async functio
             renderInvoiceItems();
             limpiarBorradorFactura(); // ✅ Borrar draft después de guardar
 
-            // Recargar historial
+            // Recargar historial e inventario real desde Supabase
             loadInvoiceHistory();
+            await fetchInventory();
+            loadProductSelector();
         } else {
             showToast(data?.message || 'Error al generar factura', 'error');
         }

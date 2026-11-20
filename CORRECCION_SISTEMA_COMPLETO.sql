@@ -272,19 +272,20 @@ BEGIN
             v_talla
         );
 
-        -- Descontar stock
+        -- Descontar stock (por talla + stock general sincronizados)
         IF v_producto_id IS NOT NULL THEN
             IF v_talla IS NOT NULL AND TRIM(v_talla) <> '' THEN
                 v_stock_talla := 'stock_' || LOWER(REPLACE(TRIM(v_talla), '-', '_'));
                 BEGIN
-                    EXECUTE format('UPDATE public.productos SET %I = GREATEST(0, %I - $1), updated_at = NOW() WHERE id = $2', 
-                        v_stock_talla, v_stock_talla)
-                        USING v_cantidad, v_producto_id;
+                    EXECUTE format(
+                        'UPDATE public.productos SET %I = GREATEST(0, COALESCE(%I, 0) - $1), stock = GREATEST(0, COALESCE(stock, 0) - $1), updated_at = NOW() WHERE id = $2',
+                        v_stock_talla, v_stock_talla
+                    ) USING v_cantidad, v_producto_id;
                 EXCEPTION WHEN OTHERS THEN
-                    UPDATE public.productos SET stock = GREATEST(0, stock - v_cantidad), updated_at = NOW() WHERE id = v_producto_id;
+                    UPDATE public.productos SET stock = GREATEST(0, COALESCE(stock, 0) - v_cantidad), updated_at = NOW() WHERE id = v_producto_id;
                 END;
             ELSE
-                UPDATE public.productos SET stock = GREATEST(0, stock - v_cantidad), updated_at = NOW() WHERE id = v_producto_id;
+                UPDATE public.productos SET stock = GREATEST(0, COALESCE(stock, 0) - v_cantidad), updated_at = NOW() WHERE id = v_producto_id;
             END IF;
         END IF;
     END LOOP;
@@ -300,7 +301,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 5. RPC ANULAR FACTURA (Restaura stock correctamente)
+-- 5. RPC ANULAR FACTURA (Restaura stock por talla + stock general correctamente)
 CREATE OR REPLACE FUNCTION public.anular_factura(p_factura_id INTEGER)
 RETURNS JSONB AS $$
 DECLARE
@@ -327,14 +328,15 @@ BEGIN
             IF v_detalle.talla IS NOT NULL AND TRIM(v_detalle.talla) <> '' THEN
                 v_stock_talla := 'stock_' || LOWER(REPLACE(TRIM(v_detalle.talla), '-', '_'));
                 BEGIN
-                    EXECUTE format('UPDATE public.productos SET %I = %I + $1, updated_at = NOW() WHERE id = $2',
-                        v_stock_talla, v_stock_talla)
-                        USING v_detalle.cantidad, v_detalle.producto_id;
+                    EXECUTE format(
+                        'UPDATE public.productos SET %I = COALESCE(%I, 0) + $1, stock = COALESCE(stock, 0) + $1, updated_at = NOW() WHERE id = $2',
+                        v_stock_talla, v_stock_talla
+                    ) USING v_detalle.cantidad, v_detalle.producto_id;
                 EXCEPTION WHEN OTHERS THEN
-                    UPDATE public.productos SET stock = stock + v_detalle.cantidad, updated_at = NOW() WHERE id = v_detalle.producto_id;
+                    UPDATE public.productos SET stock = COALESCE(stock, 0) + v_detalle.cantidad, updated_at = NOW() WHERE id = v_detalle.producto_id;
                 END;
             ELSE
-                UPDATE public.productos SET stock = stock + v_detalle.cantidad, updated_at = NOW() WHERE id = v_detalle.producto_id;
+                UPDATE public.productos SET stock = COALESCE(stock, 0) + v_detalle.cantidad, updated_at = NOW() WHERE id = v_detalle.producto_id;
             END IF;
         END IF;
     END LOOP;
@@ -350,21 +352,22 @@ BEGIN
                 v_producto_id := (v_item->>'producto_id')::INTEGER;
             ELSE
                 SELECT id INTO v_producto_id FROM public.productos 
-                WHERE referencia = COALESCE(v_item->>'referencia', v_item->>'producto_referencia') LIMIT 1;
+                WHERE TRIM(referencia) = TRIM(COALESCE(v_item->>'referencia', v_item->>'producto_referencia')) LIMIT 1;
             END IF;
 
             IF v_producto_id IS NOT NULL THEN
                 IF v_talla IS NOT NULL AND TRIM(v_talla) <> '' THEN
                     v_stock_talla := 'stock_' || LOWER(REPLACE(TRIM(v_talla), '-', '_'));
                     BEGIN
-                        EXECUTE format('UPDATE public.productos SET %I = %I + $1, updated_at = NOW() WHERE id = $2',
-                            v_stock_talla, v_stock_talla)
-                            USING v_cantidad, v_producto_id;
+                        EXECUTE format(
+                            'UPDATE public.productos SET %I = COALESCE(%I, 0) + $1, stock = COALESCE(stock, 0) + $1, updated_at = NOW() WHERE id = $2',
+                            v_stock_talla, v_stock_talla
+                        ) USING v_cantidad, v_producto_id;
                     EXCEPTION WHEN OTHERS THEN
-                        UPDATE public.productos SET stock = stock + v_cantidad, updated_at = NOW() WHERE id = v_producto_id;
+                        UPDATE public.productos SET stock = COALESCE(stock, 0) + v_cantidad, updated_at = NOW() WHERE id = v_producto_id;
                     END;
                 ELSE
-                    UPDATE public.productos SET stock = stock + v_cantidad, updated_at = NOW() WHERE id = v_producto_id;
+                    UPDATE public.productos SET stock = COALESCE(stock, 0) + v_cantidad, updated_at = NOW() WHERE id = v_producto_id;
                 END IF;
             END IF;
         END LOOP;

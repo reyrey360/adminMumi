@@ -696,30 +696,26 @@ async function viewInvoice(id) {
 // ==========================================
 
 async function cancelInvoice(id) {
-    if (!confirm('¿Está seguro de anular esta factura?')) return;
+    if (!confirm('¿Está seguro de anular esta factura? Se devolverán las prendas al inventario.')) return;
     
     try {
         showToast('Anulando factura...', 'info');
         
-        const response = await fetch(`${CONFIG.supabaseUrl}/rest/v1/rpc/anular_factura`, {
-            method: 'POST',
-            headers: {
-                'apikey': CONFIG.supabaseAnonKey,
-                'Authorization': `Bearer ${CONFIG.supabaseAnonKey}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ p_factura_id: id })
-        });
+        const { data, error } = await supabase.rpc('anular_factura', { p_factura_id: id });
+        if (error) throw error;
         
-        if (!response.ok) throw new Error('Error anulando factura');
-        
-        showToast('Factura anulada correctamente', 'success');
-        registrarAuditoria('ANULAR_FACTURA', `Factura ID: ${id}`);
-        loadInvoiceHistory();
-        if (typeof fetchInventory === 'function') fetchInventory();
+        if (data && data.success) {
+            showToast(data.message || 'Factura anulada y stock restaurado', 'success');
+            registrarAuditoria('ANULAR_FACTURA', `Factura ID: ${id}`);
+            loadInvoiceHistory();
+            if (typeof fetchInventory === 'function') await fetchInventory();
+            if (typeof loadProductSelector === 'function') loadProductSelector();
+        } else {
+            showToast(data?.message || 'No se pudo anular la factura', 'error');
+        }
     } catch (error) {
         console.error('Error:', error);
-        showToast('Error al anular la factura', 'error');
+        showToast('Error al anular la factura: ' + error.message, 'error');
     }
 }
 
@@ -733,31 +729,21 @@ async function deleteInvoiceComplete(id) {
     try {
         showToast('Eliminando factura...', 'info');
         
-        const response = await fetch(`${CONFIG.supabaseUrl}/rest/v1/rpc/eliminar_factura_completa`, {
-            method: 'POST',
-            headers: {
-                'apikey': CONFIG.supabaseAnonKey,
-                'Authorization': `Bearer ${CONFIG.supabaseAnonKey}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ p_factura_id: id })
-        });
-        
-        if (!response.ok) throw new Error('Error eliminando factura');
-        
-        const data = await response.json();
+        const { data, error } = await supabase.rpc('eliminar_factura_completa', { p_factura_id: id });
+        if (error) throw error;
         
         if (data && data.success) {
-            showToast('Factura eliminada del todo y stock restaurado', 'success');
+            showToast(data.message || 'Factura eliminada y stock restaurado', 'success');
             registrarAuditoria('ELIMINAR_FACTURA_COMPLETA', `Factura ID: ${id}`);
             loadInvoiceHistory();
-            if (typeof fetchInventory === 'function') fetchInventory();
+            if (typeof fetchInventory === 'function') await fetchInventory();
+            if (typeof loadProductSelector === 'function') loadProductSelector();
         } else {
             showToast(data?.message || 'Error al eliminar factura', 'error');
         }
     } catch (error) {
         console.error('Error:', error);
-        showToast('Error al eliminar la factura', 'error');
+        showToast('Error al eliminar la factura: ' + error.message, 'error');
     }
 }
 
