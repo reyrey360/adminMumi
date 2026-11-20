@@ -7,21 +7,36 @@
 
 // Variables de autenticación y roles
 let currentUser = null;
-let currentUserRole = null; // 'admin' o 'operario'
+let currentUserRole = null; // 'admin', 'operario' o 'empleado'
 
 // Permisos del usuario
 const PERMISOS = {
     admin: {
+        puedeVerInventario: true,
         puedeAgregar: true,
         puedeEditar: true,
         puedeEliminar: true,
-        puedeVerTodo: true
+        puedeVerTodo: true,
+        puedeEditarCliente: true,
+        puedeEliminarCliente: true
     },
     operario: {
+        puedeVerInventario: true,
         puedeAgregar: true,
         puedeEditar: true,
         puedeEliminar: false,
-        puedeVerTodo: true
+        puedeVerTodo: true,
+        puedeEditarCliente: true,
+        puedeEliminarCliente: false
+    },
+    empleado: {
+        puedeVerInventario: false,
+        puedeAgregar: false,
+        puedeEditar: false,
+        puedeEliminar: false,
+        puedeVerTodo: false,
+        puedeEditarCliente: false,
+        puedeEliminarCliente: false
     }
 };
 
@@ -371,8 +386,7 @@ function hasPermission(action) {
 
 // Mostrar/ocultar elementos según el rol
 function updateUIBasedOnRole() {
-    const isAdmin = currentUserRole === 'admin';
-    const isOperario = currentUserRole === 'operario';
+    const puedeVerInventario = hasPermission('puedeVerInventario');
 
     // Actualizar información del usuario en el header
     const userInfo = document.getElementById('userInfo');
@@ -380,9 +394,34 @@ function updateUIBasedOnRole() {
         userInfo.innerHTML = `<span class="user-role">${currentUser?.email} (${currentUserRole})</span>`;
     }
 
-    // Los operarios ven un mensaje de solo lectura en delete
-    if (isOperario) {
-        console.log('Modo operario: Algunas funciones están limitadas');
+    // Elementos exclusivos de inventario / administración
+    const dashboardStats = document.querySelector('.dashboard-stats');
+    const controlsRight = document.querySelector('.controls-right');
+    const inventarioIds = ['ley1581Btn', 'addProductBtn', 'searchInput', 'categoryFilter'];
+    const headerTitle = document.querySelector('.admin-header h1');
+
+    if (!puedeVerInventario) {
+        if (dashboardStats) dashboardStats.style.display = 'none';
+        if (controlsRight) controlsRight.style.display = 'none';
+        inventarioIds.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.style.display = 'none';
+        });
+        document.getElementById('tableView')?.classList.add('hidden');
+        document.getElementById('gridView')?.classList.add('hidden');
+        if (headerTitle) {
+            headerTitle.innerHTML = '<i class="fas fa-cash-register"></i> MumiNita - Facturación';
+        }
+    } else {
+        if (dashboardStats) dashboardStats.style.display = '';
+        if (controlsRight) controlsRight.style.display = '';
+        inventarioIds.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.style.display = '';
+        });
+        if (headerTitle) {
+            headerTitle.innerHTML = '<i class="fas fa-box"></i> Inventario MumiNita';
+        }
     }
 }
 
@@ -412,7 +451,7 @@ document.getElementById('loginForm').addEventListener('submit', async function (
         console.log('Resultado:', result);
 
         if (result.success) {
-            alert('¡Login exitoso! Bienvenido ' + result.user.email + ' - Rol: ' + result.rol);
+            showToast('¡Bienvenido! ' + result.user.email + ' (' + result.rol + ')', 'success');
 
             // Ocultar login
             const loginModal = document.getElementById('loginModal');
@@ -426,13 +465,18 @@ document.getElementById('loginForm').addEventListener('submit', async function (
             // Actualizar UI según el rol
             updateUIBasedOnRole();
 
-            // Cargar inventario
+            // Cargar productos (en memoria para facturar y en tabla si tiene permiso)
             fetchInventory().then(function (success) {
                 if (!success) {
                     loadFromLocalStorage();
                 }
-                updateDashboard();
-                renderTable();
+                if (hasPermission('puedeVerInventario')) {
+                    updateDashboard();
+                    renderTable();
+                } else {
+                    currentView = 'inventory';
+                    switchSection('billing');
+                }
             });
         } else {
             loginError.textContent = result.error || 'Error desconocido';
@@ -444,6 +488,55 @@ document.getElementById('loginForm').addEventListener('submit', async function (
         loginError.classList.remove('hidden');
     }
 });
+
+// Restaurar sesión activa automáticamente si existe token
+async function verificarSesionExistente() {
+    const token = localStorage.getItem('supabase_session_token');
+    if (!token) return;
+
+    try {
+        const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+            headers: {
+                'apikey': SUPABASE_ANON_KEY,
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        if (response.ok) {
+            const userData = await response.json();
+            currentUser = userData;
+
+            let profile = await supabase.getUserProfile(userData.id, token);
+            currentUserRole = profile?.rol || 'operario';
+
+            const loginModal = document.getElementById('loginModal');
+            if (loginModal) {
+                loginModal.style.display = 'none';
+                loginModal.classList.remove('active');
+            }
+
+            const adminPanel = document.getElementById('adminPanel');
+            if (adminPanel) {
+                adminPanel.classList.remove('hidden');
+                adminPanel.style.display = 'block';
+            }
+
+            updateUIBasedOnRole();
+            await fetchInventory();
+            if (!hasPermission('puedeVerInventario')) {
+                currentView = 'inventory';
+                switchSection('billing');
+            }
+        } else {
+            localStorage.removeItem('supabase_session_token');
+        }
+    } catch (e) {
+        console.warn('Sesión no recuperada:', e);
+    }
+}
+
+// Comprobar sesión al cargar
+document.addEventListener('DOMContentLoaded', verificarSesionExistente);
 
 // Event listener del botón de logout
 document.getElementById('logoutBtn').addEventListener('click', async function () {
@@ -973,94 +1066,72 @@ document.getElementById('gridViewBtn').addEventListener('click', function () { s
 
 // Variables del módulo de facturación
 let invoiceItems = [];
-currentView = 'inventory'; // 'inventory' | 'billing'
+currentView = 'inventory'; // 'inventory' | 'billing' | 'clients' | 'legal'
 
-// Toggle entre inventario y facturación
-document.getElementById('billingBtn')?.addEventListener('click', function () {
+// Función unificada y segura para alternar secciones sin superposiciones
+function switchSection(targetSection) {
     const billingSection = document.getElementById('billingSection');
-    const tableView = document.getElementById('tableView');
-    const gridView = document.getElementById('gridView');
     const clientesSeccion = document.getElementById('clientesSeccion');
-    const controls = document.querySelector('.controls');
-
-    if (billingSection.classList.contains('hidden')) {
-        // Cambiar a facturación
-        billingSection.classList.remove('hidden');
-        clientesSeccion.classList.add('hidden');
-        tableView.classList.add('hidden');
-        gridView.classList.add('hidden');
-        currentView = 'billing';
-
-        // Cargar productos en el selector
-        loadProductSelector();
-
-        // Agregar event listeners para el sistema híbrido
-        setupHybridProductSelector();
-
-        // Cargar historial de facturas
-        loadInvoiceHistory();
-
-        // Buscar cliente al digitar identificación
-        setupClientSearch();
-    } else {
-        // Cambiar a inventario
-        billingSection.classList.add('hidden');
-        clientesSeccion.classList.add('hidden');
-        tableView.classList.remove('hidden');
-        currentView = 'inventory';
-    }
-});
-
-// Toggle para módulo de clientes
-document.getElementById('clientesBtn')?.addEventListener('click', function () {
-    const clientesSeccion = document.getElementById('clientesSeccion');
-    const billingSection = document.getElementById('billingSection');
-    const tableView = document.getElementById('tableView');
-    const gridView = document.getElementById('gridView');
-
-    if (clientesSeccion.classList.contains('hidden')) {
-        // Cambiar a clientes
-        clientesSeccion.classList.remove('hidden');
-        billingSection.classList.add('hidden');
-        tableView.classList.add('hidden');
-        gridView.classList.add('hidden');
-        currentView = 'clients';
-
-        // Cargar clientes
-        cargarClientes();
-    } else {
-        // Cambiar a inventario
-        clientesSeccion.classList.add('hidden');
-        tableView.classList.remove('hidden');
-        currentView = 'inventory';
-    }
-});
-
-// Toggle para módulo de Ley 1581
-document.getElementById('ley1581Btn')?.addEventListener('click', function () {
     const secLegalWrapper = document.getElementById('secLegalWrapper');
-    const clientesSeccion = document.getElementById('clientesSeccion');
-    const billingSection = document.getElementById('billingSection');
     const tableView = document.getElementById('tableView');
     const gridView = document.getElementById('gridView');
+    const puedeVerInventario = hasPermission('puedeVerInventario');
 
-    if (secLegalWrapper.classList.contains('hidden')) {
-        // Mostrar sección legal
-        secLegalWrapper.classList.remove('hidden');
-        clientesSeccion.classList.add('hidden');
-        billingSection.classList.add('hidden');
-        tableView.classList.add('hidden');
-        gridView?.classList.add('hidden');
-        currentView = 'legal';
-
-        // Cargar autorizaciones
-        loadLegalConsents();
+    // Si es empleado (sin acceso a inventario), solo puede navegar entre billing y clients
+    let nextSection;
+    if (!puedeVerInventario) {
+        if (targetSection === 'clients') {
+            nextSection = (currentView === 'clients') ? 'billing' : 'clients';
+        } else {
+            nextSection = 'billing';
+        }
     } else {
-        // Volver a inventario
-        secLegalWrapper.classList.add('hidden');
-        tableView.classList.remove('hidden');
-        currentView = 'inventory';
+        // Toggle: si ya está abierta, volver a inventario
+        nextSection = (currentView === targetSection) ? 'inventory' : targetSection;
     }
+    currentView = nextSection;
+
+    // Ocultar todas las secciones primero
+    billingSection?.classList.add('hidden');
+    clientesSeccion?.classList.add('hidden');
+    secLegalWrapper?.classList.add('hidden');
+    tableView?.classList.add('hidden');
+    gridView?.classList.add('hidden');
+
+    if (nextSection === 'billing') {
+        billingSection?.classList.remove('hidden');
+        loadProductSelector();
+        setupHybridProductSelector();
+        loadInvoiceHistory();
+        setupClientSearch();
+    } else if (nextSection === 'clients') {
+        clientesSeccion?.classList.remove('hidden');
+        if (typeof cargarClientes === 'function') cargarClientes();
+    } else if (nextSection === 'legal' && puedeVerInventario) {
+        secLegalWrapper?.classList.remove('hidden');
+        if (typeof loadLegalConsents === 'function') loadLegalConsents();
+    } else if (puedeVerInventario) {
+        // Inventario
+        currentView = 'inventory';
+        if (typeof currentTableView !== 'undefined' && currentTableView === 'grid') {
+            gridView?.classList.remove('hidden');
+        } else {
+            tableView?.classList.remove('hidden');
+        }
+    }
+}
+
+// Event Listeners de las secciones
+document.getElementById('billingBtn')?.addEventListener('click', function () {
+    switchSection('billing');
+});
+
+document.getElementById('clientesBtn')?.addEventListener('click', function () {
+    switchSection('clients');
+});
+
+document.getElementById('ley1581Btn')?.addEventListener('click', function () {
+    switchSection('legal');
 });
 
 // ==========================================
@@ -1104,7 +1175,20 @@ async function searchClients(texto) {
 }
 
 // Configurar búsqueda de clientes en el formulario de facturación
+let clientSearchSetup = false;
+let currentClientSearchResults = [];
+
+window.selectClientByIndex = function(index) {
+    const client = currentClientSearchResults[index];
+    if (client) {
+        selectClient(client.id, client.nombre, client.identificacion, client.telefono || '', client.email || '');
+    }
+};
+
 function setupClientSearch() {
+    if (clientSearchSetup) return;
+    clientSearchSetup = true;
+
     const searchInput = document.getElementById('clientSearchInput');
     const searchBtn = document.getElementById('searchClientBtn');
     const resultsContainer = document.getElementById('clientSearchResults');
@@ -1122,6 +1206,8 @@ function setupClientSearch() {
     function showResults(clients) {
         if (!resultsContainer) return;
 
+        currentClientSearchResults = clients || [];
+
         if (!clients || clients.length === 0) {
             resultsContainer.innerHTML = '<div class="no-results">No se encontraron clientes</div>';
             resultsContainer.style.display = 'block';
@@ -1129,9 +1215,9 @@ function setupClientSearch() {
         }
 
         let html = '';
-        clients.forEach(client => {
+        clients.forEach((client, idx) => {
             html += `
-                <div class="client-result-item" onclick="selectClient(${client.id}, '${escapeHtml(client.nombre)}', '${escapeHtml(client.identificacion)}', '${escapeHtml(client.telefono || '')}', '${escapeHtml(client.email || '')}')">
+                <div class="client-result-item" onclick="selectClientByIndex(${idx})">
                     <div class="client-result-name">${escapeHtml(client.nombre)}</div>
                     <div class="client-result-details">
                         <span><i class="fas fa-id-card"></i> ${escapeHtml(client.identificacion)}</span>
@@ -1419,7 +1505,11 @@ function searchByReference(referencia) {
 }
 
 // Configurar event listeners para el sistema híbrido de selección de productos
+let hybridSelectorSetup = false;
 function setupHybridProductSelector() {
+    if (hybridSelectorSetup) return;
+    hybridSelectorSetup = true;
+
     const referenceInput = document.getElementById('invoiceProductReference');
     const categorySelector = document.getElementById('categorySelector');
     const referenceResult = document.getElementById('referenceResult');
@@ -1594,6 +1684,7 @@ document.getElementById('addProductToInvoiceBtn')?.addEventListener('click', fun
         referencia: product.referencia,
         nombre: product.nombre,
         cantidad: quantity,
+        precio_original: precio,
         precio_unitario: precio,
         subtotal: subtotal,
         talla: selectedSize || null,
@@ -1612,27 +1703,66 @@ document.getElementById('addProductToInvoiceBtn')?.addEventListener('click', fun
     guardarBorradorFactura();
 });
 
+// Función global para modificar el precio unitario de un item (aplicar descuento)
+window.updateInvoiceItemPrice = function (index, nuevoPrecioStr) {
+    const item = invoiceItems[index];
+    if (!item) return;
+
+    const nuevoPrecio = parseFloat(nuevoPrecioStr);
+    if (isNaN(nuevoPrecio) || nuevoPrecio < 0) {
+        showToast('Ingresa un precio válido', 'error');
+        renderInvoiceItems();
+        return;
+    }
+
+    if (item.precio_original === undefined || item.precio_original === null) {
+        item.precio_original = item.precio_unitario;
+    }
+
+    item.precio_unitario = nuevoPrecio;
+    item.subtotal = nuevoPrecio * item.cantidad;
+    renderInvoiceItems();
+    guardarBorradorFactura();
+};
+
 // Renderizar items de la factura
 function renderInvoiceItems() {
     const tbody = document.getElementById('invoiceItemsBody');
     if (!tbody) return;
 
     tbody.innerHTML = '';
-    let subtotal = 0;
+    let subtotalOriginal = 0;
+    let totalFinal = 0;
 
     invoiceItems.forEach((item, index) => {
-        subtotal += item.subtotal || 0;
+        const precioOrig = (item.precio_original !== undefined && item.precio_original !== null)
+            ? parseFloat(item.precio_original)
+            : parseFloat(item.precio_unitario || 0);
+        const precioUnit = parseFloat(item.precio_unitario || 0);
+        const cant = parseInt(item.cantidad || 1);
+        const subItem = precioUnit * cant;
+        item.subtotal = subItem;
+
+        subtotalOriginal += precioOrig * cant;
+        totalFinal += subItem;
+
+        const tieneDescuento = precioUnit < precioOrig;
         const row = document.createElement('tr');
         const tallaDisplay = item.talla ? item.talla : '-';
         row.innerHTML = `
             <td>${item.referencia || '-'}</td>
             <td>${item.nombre}</td>
             <td>${tallaDisplay}</td>
-            <td>${item.cantidad}</td>
-            <td>${parseInt(item.precio_unitario).toLocaleString('es-CO')}</td>
-            <td>${parseInt(item.subtotal).toLocaleString('es-CO')}</td>
+            <td>${cant}</td>
             <td>
-                <button onclick="removeInvoiceItem(${index})" class="btn-danger btn-small">
+                <input type="number" min="0" step="100" value="${precioUnit}"
+                    onchange="updateInvoiceItemPrice(${index}, this.value)"
+                    style="width: 105px; padding: 4px 6px; border: 1px solid #ccc; border-radius: 4px; text-align: right; font-weight: 600;">
+                ${tieneDescuento ? `<div style="font-size: 11px; color: #888; text-decoration: line-through;">Lista: $${parseInt(precioOrig).toLocaleString('es-CO')}</div>` : ''}
+            </td>
+            <td>$${parseInt(subItem).toLocaleString('es-CO')}</td>
+            <td>
+                <button type="button" onclick="removeInvoiceItem(${index})" class="btn-danger btn-small">
                     <i class="fas fa-trash"></i>
                 </button>
             </td>
@@ -1640,19 +1770,25 @@ function renderInvoiceItems() {
         tbody.appendChild(row);
     });
 
-    const total = subtotal;
+    const descuentoTotal = Math.max(0, subtotalOriginal - totalFinal);
+    const subtotalMostrar = descuentoTotal > 0 ? subtotalOriginal : totalFinal;
 
     const subtotalEl = document.getElementById('invoiceSubtotal');
+    const discountEl = document.getElementById('invoiceDiscount');
+    const discountRow = document.getElementById('invoiceDiscountRow');
     const totalEl = document.getElementById('invoiceTotal');
 
-    if (subtotalEl) subtotalEl.textContent = `${subtotal.toLocaleString('es-CO')}`;
-    if (totalEl) totalEl.textContent = `${total.toLocaleString('es-CO')}`;
+    if (subtotalEl) subtotalEl.textContent = `$${parseInt(subtotalMostrar).toLocaleString('es-CO')}`;
+    if (discountEl) discountEl.textContent = `-$${parseInt(descuentoTotal).toLocaleString('es-CO')}`;
+    if (discountRow) discountRow.style.display = descuentoTotal > 0 ? 'flex' : 'none';
+    if (totalEl) totalEl.textContent = `$${parseInt(totalFinal).toLocaleString('es-CO')}`;
 }
 
 // Función global para eliminar item
 window.removeInvoiceItem = function (index) {
     invoiceItems.splice(index, 1);
     renderInvoiceItems();
+    guardarBorradorFactura();
 };
 
 // Generar factura
@@ -1665,7 +1801,14 @@ document.getElementById('invoiceForm')?.addEventListener('submit', async functio
     }
 
     // ✅ NUEVA VALIDACIÓN: Montos antes de enviar
+    const subtotalOriginal = invoiceItems.reduce((sum, item) => {
+        const pOrig = (item.precio_original !== undefined && item.precio_original !== null)
+            ? parseFloat(item.precio_original)
+            : parseFloat(item.precio_unitario || 0);
+        return sum + (pOrig * (item.cantidad || 1));
+    }, 0);
     const subtotalTotal = invoiceItems.reduce((sum, item) => sum + (item.subtotal || 0), 0);
+    const descuentoTotal = Math.max(0, subtotalOriginal - subtotalTotal);
 
     if (subtotalTotal < CONFIG.montoMinimo) {
         showToast(`Total debe ser mayor a $${CONFIG.montoMinimo}`, 'error');
@@ -1684,11 +1827,16 @@ document.getElementById('invoiceForm')?.addEventListener('submit', async functio
         return;
     }
 
+    const metodoPago = document.getElementById('invoicePaymentMethod')?.value || 'efectivo';
+
     const items = invoiceItems.map(item => ({
         producto_id: item.producto_id,
         referencia: item.referencia,
+        producto_referencia: item.referencia,
         nombre: item.nombre,
+        producto_nombre: item.nombre,
         cantidad: item.cantidad,
+        precio_original: item.precio_original ?? item.precio_unitario,
         precio_unitario: item.precio_unitario,
         talla: item.talla || null
     }));
@@ -1699,7 +1847,11 @@ document.getElementById('invoiceForm')?.addEventListener('submit', async functio
         const { data, error } = await supabase.rpc('crear_factura_con_stock', {
             p_cliente_nombre: clienteNombre,
             p_cliente_identificacion: `${tipoId} ${numeroId}`,
-            p_items: items
+            p_items: items,
+            p_cliente_email: email || null,
+            p_cliente_telefono: telefono || null,
+            p_metodo_pago: metodoPago,
+            p_descuento: descuentoTotal
         });
 
         if (error) throw error;
@@ -1875,6 +2027,9 @@ function renderInvoiceTable() {
                     <i class="fas fa-times"></i>
                 </button>
                 ` : ''}
+                <button onclick="deleteInvoiceComplete(${factura.id})" class="cancel-btn" title="Eliminar del todo" style="background: #495057; color: white;">
+                    <i class="fas fa-trash-alt"></i>
+                </button>
             </td>
         `;
         tbody.appendChild(row);

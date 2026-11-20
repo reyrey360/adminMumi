@@ -62,7 +62,7 @@
                     <p>Bajo Stock</p>
                 </div>
             </div>
-            <div class="stat-card" style="display: none;">
+            <div class="stat-card">
                 <i class="fas fa-dollar-sign"></i>
                 <div>
                     <h3 id="totalValue">$0</h3>
@@ -226,7 +226,16 @@
                                 <label>Teléfono</label>
                                 <input type="text" id="invoicePhone" placeholder="3001234567">
                             </div>
-
+                            <div class="form-group">
+                                <label>Método de Pago</label>
+                                <select id="invoicePaymentMethod">
+                                    <option value="efectivo">Efectivo</option>
+                                    <option value="transferencia">Transferencia</option>
+                                    <option value="nequi">Nequi</option>
+                                    <option value="daviplata">Daviplata</option>
+                                    <option value="tarjeta">Tarjeta</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
 
@@ -283,6 +292,10 @@
                         <div class="total-row">
                             <span>Subtotal:</span>
                             <span id="invoiceSubtotal">$0</span>
+                        </div>
+                        <div class="total-row" id="invoiceDiscountRow" style="color: #28a745; font-weight: 600;">
+                            <span>Descuento dado:</span>
+                            <span id="invoiceDiscount">-$0</span>
                         </div>
                         <div class="total-row total-final">
                             <span>TOTAL:</span>
