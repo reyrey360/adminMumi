@@ -18,7 +18,8 @@ const PERMISOS = {
         puedeEliminar: true,
         puedeVerTodo: true,
         puedeEditarCliente: true,
-        puedeEliminarCliente: true
+        puedeEliminarCliente: true,
+        puedeEliminarFactura: true
     },
     operario: {
         puedeVerInventario: true,
@@ -27,7 +28,8 @@ const PERMISOS = {
         puedeEliminar: false,
         puedeVerTodo: true,
         puedeEditarCliente: true,
-        puedeEliminarCliente: false
+        puedeEliminarCliente: false,
+        puedeEliminarFactura: false
     },
     empleado: {
         puedeVerInventario: false,
@@ -36,7 +38,8 @@ const PERMISOS = {
         puedeEliminar: false,
         puedeVerTodo: false,
         puedeEditarCliente: false,
-        puedeEliminarCliente: false
+        puedeEliminarCliente: false,
+        puedeEliminarFactura: false
     }
 };
 
@@ -2029,9 +2032,11 @@ function renderInvoiceTable() {
                     <i class="fas fa-times"></i>
                 </button>
                 ` : ''}
+                ${hasPermission('puedeEliminarFactura') ? `
                 <button onclick="deleteInvoiceComplete(${factura.id})" class="cancel-btn" title="Eliminar del todo" style="background: #495057; color: white;">
                     <i class="fas fa-trash-alt"></i>
                 </button>
+                ` : ''}
             </td>
         `;
         tbody.appendChild(row);

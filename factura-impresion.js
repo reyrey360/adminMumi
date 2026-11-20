@@ -724,6 +724,11 @@ async function cancelInvoice(id) {
 // ==========================================
 
 async function deleteInvoiceComplete(id) {
+    if (typeof hasPermission === 'function' && !hasPermission('puedeEliminarFactura')) {
+        showToast('No tienes permiso para eliminar facturas. Solo puedes anularlas.', 'error');
+        return;
+    }
+
     if (!confirm('⚠️ ¿Está seguro de ELIMINAR POR COMPLETO esta factura? Esta acción borrará el registro de la base de datos permanentemente y restaurará el stock si la factura estaba activa.')) return;
     
     try {
