@@ -19,7 +19,8 @@ const PERMISOS = {
         puedeVerTodo: true,
         puedeEditarCliente: true,
         puedeEliminarCliente: true,
-        puedeEliminarFactura: true
+        puedeEliminarFactura: true,
+        puedeVerReportes: true
     },
     operario: {
         puedeVerInventario: true,
@@ -29,7 +30,8 @@ const PERMISOS = {
         puedeVerTodo: true,
         puedeEditarCliente: true,
         puedeEliminarCliente: false,
-        puedeEliminarFactura: false
+        puedeEliminarFactura: false,
+        puedeVerReportes: false
     },
     empleado: {
         puedeVerInventario: false,
@@ -39,7 +41,8 @@ const PERMISOS = {
         puedeVerTodo: false,
         puedeEditarCliente: false,
         puedeEliminarCliente: false,
-        puedeEliminarFactura: false
+        puedeEliminarFactura: false,
+        puedeVerReportes: false
     }
 };
 
@@ -390,11 +393,21 @@ function hasPermission(action) {
 // Mostrar/ocultar elementos según el rol
 function updateUIBasedOnRole() {
     const puedeVerInventario = hasPermission('puedeVerInventario');
+    const puedeVerReportes = hasPermission('puedeVerReportes');
 
     // Actualizar información del usuario en el header
     const userInfo = document.getElementById('userInfo');
     if (userInfo) {
         userInfo.innerHTML = `<span class="user-role">${currentUser?.email} (${currentUserRole})</span>`;
+    }
+
+    // Botón de Reportes y Caja (Solo Admin)
+    const reportesBtn = document.getElementById('reportesBtn');
+    if (reportesBtn) {
+        reportesBtn.style.display = puedeVerReportes ? '' : 'none';
+    }
+    if (!puedeVerReportes) {
+        document.getElementById('reportesSeccion')?.classList.add('hidden');
     }
 
     // Elementos exclusivos de inventario / administración
@@ -1076,9 +1089,11 @@ function switchSection(targetSection) {
     const billingSection = document.getElementById('billingSection');
     const clientesSeccion = document.getElementById('clientesSeccion');
     const secLegalWrapper = document.getElementById('secLegalWrapper');
+    const reportesSeccion = document.getElementById('reportesSeccion');
     const tableView = document.getElementById('tableView');
     const gridView = document.getElementById('gridView');
     const puedeVerInventario = hasPermission('puedeVerInventario');
+    const puedeVerReportes = hasPermission('puedeVerReportes');
 
     // Si es empleado (sin acceso a inventario), solo puede navegar entre billing y clients
     let nextSection;
@@ -1098,6 +1113,7 @@ function switchSection(targetSection) {
     billingSection?.classList.add('hidden');
     clientesSeccion?.classList.add('hidden');
     secLegalWrapper?.classList.add('hidden');
+    reportesSeccion?.classList.add('hidden');
     tableView?.classList.add('hidden');
     gridView?.classList.add('hidden');
 
@@ -1113,6 +1129,9 @@ function switchSection(targetSection) {
     } else if (nextSection === 'legal' && puedeVerInventario) {
         secLegalWrapper?.classList.remove('hidden');
         if (typeof loadLegalConsents === 'function') loadLegalConsents();
+    } else if (nextSection === 'reports' && puedeVerReportes) {
+        reportesSeccion?.classList.remove('hidden');
+        if (typeof inicializarModuloReportes === 'function') inicializarModuloReportes();
     } else if (puedeVerInventario) {
         // Inventario
         currentView = 'inventory';
@@ -1135,6 +1154,10 @@ document.getElementById('clientesBtn')?.addEventListener('click', function () {
 
 document.getElementById('ley1581Btn')?.addEventListener('click', function () {
     switchSection('legal');
+});
+
+document.getElementById('reportesBtn')?.addEventListener('click', function () {
+    switchSection('reports');
 });
 
 // ==========================================
@@ -1706,12 +1729,23 @@ document.getElementById('addProductToInvoiceBtn')?.addEventListener('click', fun
     guardarBorradorFactura();
 });
 
+// Formatear con punto de mil en tiempo real al escribir en la casilla de precio
+window.formatPriceInputLive = function (inputEl) {
+    const soloDigitos = String(inputEl.value || '').replace(/\D/g, '');
+    if (!soloDigitos) {
+        inputEl.value = '';
+        return;
+    }
+    inputEl.value = parseInt(soloDigitos, 10).toLocaleString('es-CO');
+};
+
 // Función global para modificar el precio unitario de un item (aplicar descuento)
 window.updateInvoiceItemPrice = function (index, nuevoPrecioStr) {
     const item = invoiceItems[index];
     if (!item) return;
 
-    const nuevoPrecio = parseFloat(nuevoPrecioStr);
+    const soloDigitos = String(nuevoPrecioStr || '').replace(/\D/g, '');
+    const nuevoPrecio = soloDigitos ? parseInt(soloDigitos, 10) : NaN;
     if (isNaN(nuevoPrecio) || nuevoPrecio < 0) {
         showToast('Ingresa un precio válido', 'error');
         renderInvoiceItems();
@@ -1750,6 +1784,7 @@ function renderInvoiceItems() {
         totalFinal += subItem;
 
         const tieneDescuento = precioUnit < precioOrig;
+        const precioFormateado = parseInt(precioUnit).toLocaleString('es-CO');
         const row = document.createElement('tr');
         const tallaDisplay = item.talla ? item.talla : '-';
         row.innerHTML = `
@@ -1758,9 +1793,13 @@ function renderInvoiceItems() {
             <td>${tallaDisplay}</td>
             <td>${cant}</td>
             <td>
-                <input type="number" min="0" step="100" value="${precioUnit}"
-                    onchange="updateInvoiceItemPrice(${index}, this.value)"
-                    style="width: 105px; padding: 4px 6px; border: 1px solid #ccc; border-radius: 4px; text-align: right; font-weight: 600;">
+                <div style="display: inline-flex; align-items: center; gap: 3px;">
+                    <span style="font-weight: 600; color: #555;">$</span>
+                    <input type="text" inputmode="numeric" value="${precioFormateado}"
+                        oninput="formatPriceInputLive(this)"
+                        onchange="updateInvoiceItemPrice(${index}, this.value)"
+                        style="width: 110px; padding: 4px 6px; border: 1px solid #ccc; border-radius: 4px; text-align: right; font-weight: 600;">
+                </div>
                 ${tieneDescuento ? `<div style="font-size: 11px; color: #888; text-decoration: line-through;">Lista: $${parseInt(precioOrig).toLocaleString('es-CO')}</div>` : ''}
             </td>
             <td>$${parseInt(subItem).toLocaleString('es-CO')}</td>
@@ -1831,6 +1870,7 @@ document.getElementById('invoiceForm')?.addEventListener('submit', async functio
     }
 
     const metodoPago = document.getElementById('invoicePaymentMethod')?.value || 'efectivo';
+    const vendedorEmail = currentUser?.email || null;
 
     const items = invoiceItems.map(item => ({
         producto_id: item.producto_id,
@@ -1854,7 +1894,8 @@ document.getElementById('invoiceForm')?.addEventListener('submit', async functio
             p_cliente_email: email || null,
             p_cliente_telefono: telefono || null,
             p_metodo_pago: metodoPago,
-            p_descuento: descuentoTotal
+            p_descuento: descuentoTotal,
+            p_vendedor_email: vendedorEmail
         });
 
         if (error) throw error;
@@ -1862,10 +1903,41 @@ document.getElementById('invoiceForm')?.addEventListener('submit', async functio
         if (data && data.success) {
             showToast(`Factura ${data.numero_factura} generada correctamente`, 'success');
 
+            // Guardar datos de la última factura para envío rápido por WhatsApp / Impresión
+            const ultimaFactura = {
+                id: data.factura_id,
+                numero_factura: data.numero_factura,
+                fecha_creacion: new Date().toISOString(),
+                cliente_nombre: clienteNombre,
+                cliente_identificacion: `${tipoId} ${numeroId}`,
+                cliente_email: email || null,
+                cliente_telefono: telefono || null,
+                metodo_pago: metodoPago,
+                vendedor_email: vendedorEmail,
+                items: items,
+                subtotal: descuentoTotal > 0 ? subtotalOriginal : subtotalTotal,
+                descuento: descuentoTotal,
+                total: subtotalTotal,
+                estado: 'activa'
+            };
+
+            const lastActionsBox = document.getElementById('lastInvoiceActions');
+            const lastSummary = document.getElementById('lastInvoiceSummary');
+            const btnWA = document.getElementById('btnLastInvoiceWhatsApp');
+            const btnView = document.getElementById('btnLastInvoiceView');
+            if (lastActionsBox && lastSummary) {
+                lastSummary.textContent = `✅ Recibo #${data.numero_factura} generado ($${parseInt(subtotalTotal).toLocaleString('es-CO')})`;
+                lastActionsBox.classList.remove('hidden');
+                if (btnWA) btnWA.onclick = () => enviarReciboWhatsApp(ultimaFactura);
+                if (btnView) btnView.onclick = () => viewInvoice(data.factura_id);
+            }
+
             // ✅ REGISTRAR AUDITORÍA
             registrarAuditoria('CREAR_FACTURA', {
                 numero_factura: data.numero_factura,
                 cliente: clienteNombre,
+                vendedor: vendedorEmail,
+                descuento: descuentoTotal,
                 total: subtotalTotal
             });
 
@@ -2016,16 +2088,25 @@ function renderInvoiceTable() {
 
     facturasPagina.forEach(factura => {
         const fechaHora = formatDate(factura.fecha_creacion);
+        const motivoHtml = (factura.estado === 'anulada' && factura.motivo_anulacion)
+            ? `<div style="font-size: 11px; color: #dc3545; margin-top: 2px;">${escapeHtml(factura.motivo_anulacion)}</div>`
+            : '';
         const row = document.createElement('tr');
         row.innerHTML = `
             <td>${factura.numero_factura}</td>
             <td>${fechaHora}</td>
-            <td>${factura.cliente_nombre}</td>
-            <td>${formatCurrency(factura.total)}</td>
-            <td><span class="status-badge ${factura.estado === 'activa' ? 'active' : 'cancelled'}">${factura.estado}</span></td>
+            <td>${escapeHtml(factura.cliente_nombre)}</td>
+            <td>$${formatCurrency(factura.total)}</td>
+            <td>
+                <span class="status-badge ${factura.estado === 'activa' ? 'active' : 'cancelled'}">${factura.estado}</span>
+                ${motivoHtml}
+            </td>
             <td class="action-btns">
-                <button onclick="viewInvoice(${factura.id})" class="view-btn" title="Ver">
+                <button onclick="viewInvoice(${factura.id})" class="view-btn" title="Ver / Imprimir">
                     <i class="fas fa-eye"></i>
+                </button>
+                <button onclick="enviarReciboWhatsApp(${factura.id})" class="view-btn" title="Enviar recibo por WhatsApp" style="background: #25D366; color: white;">
+                    <i class="fab fa-whatsapp"></i>
                 </button>
                 ${factura.estado === 'activa' ? `
                 <button onclick="cancelInvoice(${factura.id})" class="cancel-btn" title="Anular">

@@ -90,6 +90,9 @@
                 <button id="ley1581Btn" class="btn-primary" style="background: #6f42c1;">
                     <i class="fas fa-gavel"></i> Ley 1581
                 </button>
+                <button id="reportesBtn" class="btn-primary" style="background: #e67e22;">
+                    <i class="fas fa-chart-line"></i> Reportes y Caja
+                </button>
                 <button id="addProductBtn" class="btn-primary">
                     <i class="fas fa-plus"></i> Nuevo Producto
                 </button>
@@ -311,6 +314,17 @@
                             Cancelar
                         </button>
                     </div>
+                    <div id="lastInvoiceActions" class="hidden" style="margin-top: 15px; padding: 14px 18px; background: #e8f8f0; border: 1px solid #28a745; border-radius: 8px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px;">
+                        <span id="lastInvoiceSummary" style="font-weight: 600; color: #155724;"></span>
+                        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                            <button type="button" id="btnLastInvoiceWhatsApp" class="btn-primary" style="background: #25D366; border: none;">
+                                <i class="fab fa-whatsapp"></i> Enviar recibo por WhatsApp
+                            </button>
+                            <button type="button" id="btnLastInvoiceView" class="btn-secondary">
+                                <i class="fas fa-print"></i> Ver / Imprimir
+                            </button>
+                        </div>
+                    </div>
                 </form>
             </div>
 
@@ -461,6 +475,153 @@
                 </table>
             </div>
         </div>
+
+        <!-- Reportes, Cierre de Caja y Alertas de Stock (Solo Admin) -->
+        <section id="reportesSeccion" class="hidden" style="padding: 1.5rem 2rem; max-width: 1400px; margin: 0 auto;">
+            <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+                <h2 style="margin: 0;"><i class="fas fa-chart-line" style="color: #e67e22;"></i> Cierre de Caja, Reportes y Alertas</h2>
+                <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px;">
+                    <button type="button" id="btnReporteHoy" class="btn-secondary">Hoy</button>
+                    <button type="button" id="btnReporteSemana" class="btn-secondary">Últimos 7 días</button>
+                    <button type="button" id="btnReporteMes" class="btn-secondary">Este mes</button>
+                    <input type="date" id="reporteFechaInicio" style="padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
+                    <span>a</span>
+                    <input type="date" id="reporteFechaFin" style="padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
+                    <button type="button" id="btnGenerarReporte" class="btn-primary" style="background: #e67e22;">
+                        <i class="fas fa-sync-alt"></i> Consultar
+                    </button>
+                </div>
+            </div>
+
+            <!-- Tarjetas Cierre de Caja -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+                <div class="stat-card" style="border-left: 4px solid #28a745;">
+                    <i class="fas fa-cash-register" style="color: #28a745;"></i>
+                    <div>
+                        <h3 id="repTotalVendido">$0</h3>
+                        <p>Total Vendido (Activas)</p>
+                    </div>
+                </div>
+                <div class="stat-card" style="border-left: 4px solid #007bff;">
+                    <i class="fas fa-receipt" style="color: #007bff;"></i>
+                    <div>
+                        <h3 id="repCantVentas">0</h3>
+                        <p>Facturas Activas</p>
+                    </div>
+                </div>
+                <div class="stat-card" style="border-left: 4px solid #e67e22;">
+                    <i class="fas fa-tags" style="color: #e67e22;"></i>
+                    <div>
+                        <h3 id="repTotalDescuentos">$0</h3>
+                        <p>Total Descuentos Dados</p>
+                    </div>
+                </div>
+                <div class="stat-card" style="border-left: 4px solid #dc3545;">
+                    <i class="fas fa-ban" style="color: #dc3545;"></i>
+                    <div>
+                        <h3 id="repCantAnuladas">0</h3>
+                        <p>Facturas Anuladas</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Desglose por Método de Pago y por Vendedor -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1.5rem; margin-bottom: 1.5rem;">
+                <div style="background: #fff; border-radius: 10px; padding: 1.2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
+                    <h3 style="margin-top: 0;"><i class="fas fa-wallet" style="color: #28a745;"></i> Desglose por Método de Pago</h3>
+                    <table class="products-table">
+                        <thead>
+                            <tr>
+                                <th>Método</th>
+                                <th style="text-align: center;">Ventas</th>
+                                <th style="text-align: right;">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody id="repMetodosBody">
+                            <tr><td colspan="3" class="text-center">Cargando...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div style="background: #fff; border-radius: 10px; padding: 1.2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
+                    <h3 style="margin-top: 0;"><i class="fas fa-user-tie" style="color: #007bff;"></i> Ventas por Vendedor</h3>
+                    <table class="products-table">
+                        <thead>
+                            <tr>
+                                <th>Vendedor</th>
+                                <th style="text-align: center;">Ventas</th>
+                                <th style="text-align: right;">Descuentos</th>
+                                <th style="text-align: right;">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody id="repVendedoresBody">
+                            <tr><td colspan="4" class="text-center">Cargando...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Detalle de Facturas del Periodo -->
+            <div style="background: #fff; border-radius: 10px; padding: 1.2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.06); margin-bottom: 1.5rem; overflow-x: auto;">
+                <h3 style="margin-top: 0;"><i class="fas fa-list-alt"></i> Detalle de Ventas y Anulaciones del Periodo</h3>
+                <table class="products-table">
+                    <thead>
+                        <tr>
+                            <th>Factura</th>
+                            <th>Fecha</th>
+                            <th>Cliente</th>
+                            <th>Vendedor</th>
+                            <th>Pago</th>
+                            <th>Descuento</th>
+                            <th>Total</th>
+                            <th>Estado / Motivo</th>
+                        </tr>
+                    </thead>
+                    <tbody id="repDetalleVentasBody">
+                        <tr><td colspan="8" class="text-center">Cargando...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Top Prendas Más Vendidas y Alertas de Bajo Stock por Talla -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 1.5rem;">
+                <div style="background: #fff; border-radius: 10px; padding: 1.2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.06); overflow-x: auto;">
+                    <h3 style="margin-top: 0;"><i class="fas fa-trophy" style="color: #f39c12;"></i> Top 10 Prendas Más Vendidas</h3>
+                    <table class="products-table">
+                        <thead>
+                            <tr>
+                                <th style="text-align: center;">#</th>
+                                <th>Producto</th>
+                                <th>Tallas top</th>
+                                <th style="text-align: center;">Unds</th>
+                                <th style="text-align: right;">Ingresos</th>
+                            </tr>
+                        </thead>
+                        <tbody id="repTopProductosBody">
+                            <tr><td colspan="5" class="text-center">Cargando...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div style="background: #fff; border-radius: 10px; padding: 1.2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.06); overflow-x: auto;">
+                    <h3 style="margin-top: 0;"><i class="fas fa-exclamation-triangle" style="color: #dc3545;"></i> Alertas de Bajo Stock por Talla (≤ 2 und)</h3>
+                    <div id="repResumenTallasCriticas" style="margin-bottom: 10px; font-size: 13px;"></div>
+                    <table class="products-table">
+                        <thead>
+                            <tr>
+                                <th>Ref</th>
+                                <th>Producto</th>
+                                <th>Categoría</th>
+                                <th>Tallas Críticas / Agotadas</th>
+                            </tr>
+                        </thead>
+                        <tbody id="repBajoStockTallasBody">
+                            <tr><td colspan="4" class="text-center">Cargando...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
 
     </div><!-- /adminPanel -->
 
@@ -659,6 +820,7 @@
     <script src="supabase-config.js"></script>
     <script src="factura-impresion.js"></script>
     <script src="clientes.js"></script>
+    <script src="reportes.js"></script>
     <script src="admin.js"></script>
 
     <!-- Inicializar inventario al cargar la página -->

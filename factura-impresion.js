@@ -262,6 +262,8 @@ function getFacturaPDF(factura, items, subtotal, iva, total, descuento = 0) {
                     <p style="margin: 5px 0;"><b>Número:</b> ${factura.numero_factura}</p>
                     <p style="margin: 5px 0;"><b>Fecha:</b> ${fecha}</p>
                     <p style="margin: 5px 0;"><b>Estado:</b> <span style="background: ${factura.estado === 'activa' ? '#28a745' : '#dc3545'}; color: white; padding: 2px 8px; border-radius: 3px;">${(factura.estado || 'Activa').toUpperCase()}</span></p>
+                    ${factura.vendedor_email ? `<p style="margin: 5px 0;"><b>Atendido por:</b> ${factura.vendedor_email}</p>` : ''}
+                    ${factura.estado === 'anulada' && factura.motivo_anulacion ? `<p style="margin: 5px 0; color: #dc3545;"><b>Motivo anulación:</b> ${factura.motivo_anulacion}${factura.anulado_por ? ` (${factura.anulado_por})` : ''}</p>` : ''}
                 </div>
                 <div>
                     <h3 style="border-bottom: 1px solid #000; padding-bottom: 5px;">CLIENTE</h3>
@@ -629,7 +631,10 @@ function crearModal() {
                 <button onclick="document.getElementById('facturaModal').style.display='none'" style="background: transparent; border: none; font-size: 24px; cursor: pointer;">×</button>
             </div>
             <div class="modal-content-factura" style="padding: 20px;"></div>
-            <div style="padding: 15px; border-top: 1px solid #ddd; display: flex; gap: 10px; justify-content: flex-end;">
+            <div style="padding: 15px; border-top: 1px solid #ddd; display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end;">
+                <button onclick="enviarReciboWhatsApp()" style="background: #25D366; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">
+                    <i class="fab fa-whatsapp"></i> Enviar por WhatsApp
+                </button>
                 <button onclick="descargarPDF()" style="background: #28a745; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer;">
                     <i class="fas fa-download"></i> Descargar PDF
                 </button>
@@ -692,21 +697,128 @@ async function viewInvoice(id) {
 }
 
 // ==========================================
-// ANULAR FACTURA
+// ENVIAR RECIBO POR WHATSAPP EN 1 CLIC
+// ==========================================
+
+async function enviarReciboWhatsApp(facturaOId = null) {
+    try {
+        let factura = facturaActual;
+
+        if (facturaOId && typeof facturaOId === 'object') {
+            factura = facturaOId;
+        } else if (facturaOId && (typeof facturaOId === 'number' || typeof facturaOId === 'string')) {
+            const response = await fetch(`${CONFIG.supabaseUrl}/rest/v1/facturas?id=eq.${facturaOId}`, {
+                headers: supabase.getHeaders()
+            });
+            if (!response.ok) throw new Error('No se pudo cargar la factura');
+            const rows = await response.json();
+            factura = rows[0];
+        }
+
+        if (!factura) {
+            showToast('No hay factura seleccionada para enviar', 'error');
+            return;
+        }
+
+        let itemsArr = factura.items || itemsActual || [];
+        if (typeof itemsArr === 'string') {
+            try { itemsArr = JSON.parse(itemsArr); } catch (e) { itemsArr = []; }
+        }
+
+        let subtotalOrig = 0;
+        let subtotalNeto = 0;
+        const lineasItems = itemsArr.map(item => {
+            const cant = parseInt(item.cantidad || 1);
+            const pUnit = parseFloat(item.precio_unitario ?? item.precio ?? 0);
+            const pOrig = parseFloat(item.precio_original ?? pUnit);
+            const sub = cant * pUnit;
+            subtotalNeto += sub;
+            subtotalOrig += cant * pOrig;
+            const tallaTxt = item.talla ? ` (Talla ${item.talla})` : '';
+            return `• ${cant}x ${item.nombre || item.producto_nombre || 'Producto'}${tallaTxt} — $${formatCurrency(sub)}`;
+        });
+
+        const descuento = parseFloat(factura.descuento || 0) > 0
+            ? parseFloat(factura.descuento)
+            : Math.max(0, subtotalOrig - subtotalNeto);
+        const subtotalMostrar = descuento > 0 ? Math.max(subtotalOrig, subtotalNeto + descuento) : subtotalNeto;
+        const total = parseFloat(factura.total ?? subtotalNeto);
+        const fecha = factura.fecha_creacion ? formatDate(factura.fecha_creacion) : formatDate(new Date());
+
+        let mensaje = `🧾 *RECIBO DE COMPRA - ${CONFIG.nombreEmpresa}*\n`;
+        mensaje += `_${CONFIG.subtituloEmpresa}_\n`;
+        mensaje += `NIT: ${CONFIG.nit}\n`;
+        mensaje += `────────────────────\n`;
+        mensaje += `*Recibo #:* ${factura.numero_factura}\n`;
+        mensaje += `*Fecha:* ${fecha}\n`;
+        mensaje += `*Cliente:* ${factura.cliente_nombre || '-'}\n`;
+        mensaje += `*ID:* ${factura.cliente_identificacion || '-'}\n`;
+        mensaje += `────────────────────\n`;
+        mensaje += `*Detalle de compra:*\n`;
+        mensaje += lineasItems.join('\n') + `\n`;
+        mensaje += `────────────────────\n`;
+        if (descuento > 0) {
+            mensaje += `Subtotal: $${formatCurrency(subtotalMostrar)}\n`;
+            mensaje += `Descuento dado: -$${formatCurrency(descuento)}\n`;
+        }
+        mensaje += `*TOTAL PAGADO: $${formatCurrency(total)}*\n`;
+        mensaje += `Método de pago: ${(factura.metodo_pago || 'Efectivo').toUpperCase()}\n`;
+        mensaje += `────────────────────\n`;
+        mensaje += `¡Gracias por tu compra en *${CONFIG.nombreEmpresa}*! 💖\n`;
+        mensaje += `${CONFIG.direccion}\n`;
+        mensaje += `${CONFIG.website}`;
+
+        // Limpiar teléfono del cliente
+        let rawPhone = (factura.cliente_telefono || '').replace(/\D/g, '');
+        if (!rawPhone) {
+            const ingresado = prompt('El cliente no tiene teléfono registrado.\nIngresa el número de WhatsApp (ej. 3161234567) o deja vacío para elegir el contacto:');
+            if (ingresado === null) return; // Cancelado
+            rawPhone = ingresado.replace(/\D/g, '');
+        }
+        if (rawPhone.length === 10 && rawPhone.startsWith('3')) {
+            rawPhone = '57' + rawPhone;
+        }
+
+        const waUrl = rawPhone
+            ? `https://wa.me/${rawPhone}?text=${encodeURIComponent(mensaje)}`
+            : `https://wa.me/?text=${encodeURIComponent(mensaje)}`;
+
+        window.open(waUrl, '_blank');
+        registrarAuditoria('ENVIAR_RECIBO_WHATSAPP', `Factura #${factura.numero_factura}`);
+    } catch (error) {
+        console.error('Error enviando por WhatsApp:', error);
+        showToast('Error al preparar envío por WhatsApp', 'error');
+    }
+}
+
+// ==========================================
+// ANULAR FACTURA (Con motivo obligatorio)
 // ==========================================
 
 async function cancelInvoice(id) {
-    if (!confirm('¿Está seguro de anular esta factura? Se devolverán las prendas al inventario.')) return;
+    const motivo = prompt('⚠️ MOTIVO OBLIGATORIO DE ANULACIÓN:\nEscribe brevemente por qué se anula esta factura (ej. "Cambio de talla", "Error de digitación"):');
+    if (motivo === null) return; // Usuario canceló
+    if (motivo.trim().length < 3) {
+        showToast('Debes escribir un motivo válido (mínimo 3 caracteres) para anular la factura', 'error');
+        return;
+    }
+
+    if (!confirm(`¿Confirmas anular esta factura?\nMotivo: "${motivo.trim()}"\n\nSe devolverán las prendas al inventario.`)) return;
     
     try {
         showToast('Anulando factura...', 'info');
+        const anuladoPor = (typeof currentUser !== 'undefined' && currentUser?.email) ? currentUser.email : null;
         
-        const { data, error } = await supabase.rpc('anular_factura', { p_factura_id: id });
+        const { data, error } = await supabase.rpc('anular_factura', {
+            p_factura_id: id,
+            p_motivo: motivo.trim(),
+            p_anulado_por: anuladoPor
+        });
         if (error) throw error;
         
         if (data && data.success) {
             showToast(data.message || 'Factura anulada y stock restaurado', 'success');
-            registrarAuditoria('ANULAR_FACTURA', `Factura ID: ${id}`);
+            registrarAuditoria('ANULAR_FACTURA', { factura_id: id, motivo: motivo.trim(), anulado_por: anuladoPor });
             loadInvoiceHistory();
             if (typeof fetchInventory === 'function') await fetchInventory();
             if (typeof loadProductSelector === 'function') loadProductSelector();
@@ -761,3 +873,4 @@ window.cancelInvoice = cancelInvoice;
 window.deleteInvoiceComplete = deleteInvoiceComplete;
 window.descargarPDF = descargarPDF;
 window.imprimirFactura = imprimirFactura;
+window.enviarReciboWhatsApp = enviarReciboWhatsApp;
