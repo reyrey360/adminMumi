@@ -369,15 +369,38 @@ table img.thumbnail {
     display: block;
 }
 
-table td:first-child,
-table th:first-child,
-table td:nth-child(6),
-table th:nth-child(6) {
+#tableView .products-table td:first-child,
+#tableView .products-table th:first-child,
+#tableView .products-table td:nth-child(6),
+#tableView .products-table th:nth-child(6) {
     width: 60px;
     min-width: 60px;
     max-width: 60px;
     text-align: center;
     white-space: nowrap;
+}
+
+/* Estilos limpios para tablas del módulo de Reportes y Caja */
+#reportesSeccion table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: auto;
+}
+
+#reportesSeccion table th,
+#reportesSeccion table td {
+    width: auto;
+    min-width: auto;
+    max-width: none;
+    padding: 0.75rem 0.9rem;
+    text-align: left;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
+#reportesSeccion table td:nth-child(3),
+#reportesSeccion table td:last-child {
+    white-space: normal;
 }
 
 .description-preview {
